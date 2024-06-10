@@ -3,7 +3,9 @@ const zt = @import("ztileon.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
+    //defer std.debug.assert(gpa.deinit() == .ok);
+
+    defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
 

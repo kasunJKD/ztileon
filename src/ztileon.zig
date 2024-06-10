@@ -93,20 +93,38 @@ pub fn readTiledMapJson(allocator: std.mem.Allocator, path: []const u8) !Map {
     return result;
 }
 
+// fn parseLayersArray(allocator: std.mem.Allocator, layersArr: ?std.json.Array) ![]Layers {
+//     var layers = std.ArrayList(Layers).init(allocator);
+//     defer layers.clearAndFree();
+//
+//     std.debug.print("Layers len: {any}\n", .{layersArr.?.items.len});
+//
+//     for (layersArr.?.items) |item| {
+//         const item_obj = item.object;
+//
+//         const val = Layers{
+//             .height = item_obj.get("height").?.integer,
+//         };
+//         try layers.append(val);
+//     }
+//
+//     return layers.toOwnedSlice();
+// }
+
 fn parseLayersArray(allocator: std.mem.Allocator, layersArr: ?std.json.Array) ![]Layers {
-    var layers = std.ArrayList(Layers).init(allocator);
-    defer layers.deinit();
+    if (layersArr == null) return &[_]Layers{};
 
-    std.debug.print("Layers len: {any}\n", .{layersArr.?.items.len});
+    const layerCount = layersArr.?.items.len;
+    var layers = try allocator.alloc(Layers, layerCount);
+    defer allocator.free(layers);
 
-    for (layersArr.?.items) |item| {
+    for (layersArr.?.items, 0..(layersArr.?.items.len)) |item, index| {
         const item_obj = item.object;
 
-        const val = Layers{
+        layers[index] = Layers{
             .height = item_obj.get("height").?.integer,
         };
-        try layers.append(val);
     }
 
-    return layers.toOwnedSlice();
+    return layers;
 }

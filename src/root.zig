@@ -10,6 +10,6 @@ test "basictestMain" {
 
     const parsed = try zt.readTiledMapJson(allocator, "maps/map_output.json");
 
-    //const val = parsed.height;
-    std.debug.print("map:{any}\n", .{parsed});
+    const val = parsed.height;
+    std.debug.print("map:{any}\n", .{val});
 }
