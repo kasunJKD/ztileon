@@ -1,30 +1,30 @@
 const std = @import("std");
 
 pub const Map = struct {
-    compressionlevel: i64 = -1,
+    compressionlevel: ?i64,
     height: i64 = 1,
-    hexsidelength: u64 = 0,
-    infinite: bool = false,
-    orientation: ?[]const u8 = null,
-    layers: ?[]Layers = null,
-    nextlayerid: u64,
-    nextobjectid: u64,
-    parallaxoriginx: f64,
-    parallaxoriginy: f64,
+    hexsidelength: ?i64,
+    infinite: ?bool = false,
+    layers: []Layers,
+    nextlayerid: ?i64,
+    nextobjectid: ?i64,
+    parallaxoriginx: ?f64,
+    parallaxoriginy: ?f64,
     properties: ?[]Properties = null,
-    renderorder: []const u8 = "right-down",
-    staggeraxis: []const u8,
-    staggerindex: []const u8,
-    tiledversion: []const u8,
-    tileheight: u64,
+    renderorder: ?[]const u8 = null,
+    staggeraxis: ?[]const u8 = null,
+    staggerindex: ?[]const u8 = null,
+    tiledversion: ?[]const u8 = null,
+    tileheight: i64,
     tilesets: ?[]Tileset = null,
-    tilewidth: u64,
-    type: []const u8 = "map",
-    width: u64,
+    tilewidth: i64,
+    type: ?[]const u8 = "map",
+    width: i64,
 };
 
 pub const Layers = struct {
-    chunks: ?[]Chunk = null,
+    //chunks: ?[]Chunk = null,
+    height: i64,
 };
 
 pub const Chunk = struct {
@@ -34,7 +34,7 @@ pub const Chunk = struct {
 pub const Tileset = struct {
     columns: i64,
     firstgid: i64,
-    grid: Grid = null,
+    grid: ?Grid = null,
 };
 
 pub const Grid = struct {
@@ -56,35 +56,57 @@ pub fn readTiledMapJson(allocator: std.mem.Allocator, path: []const u8) !Map {
 
     const file_size = try file.getEndPos();
     const file_buffer = try allocator.alloc(u8, file_size);
-    const data = try std.fs.cwd().readFile(path, file_buffer);
     defer allocator.free(file_buffer);
+
+    const data = try std.fs.cwd().readFile(path, file_buffer);
 
     //parse json data
     const parser = try std.json.parseFromSlice(std.json.Value, allocator, data, .{ .allocate = .alloc_always });
     defer parser.deinit();
 
+    //std.debug.print("layers original data {any}", .{parser.value.object.get("layers").?.array});
+
+    const layersParsedData = try parseLayersArray(allocator, parser.value.object.get("layers").?.array);
+
     const result = Map{
         .height = parser.value.object.get("height").?.integer,
-        .compressionlevel = parser.value.object.get("compressionlevel").?.integer,
-        .hexsidelength = parser.value.object.get("hexsidelength").?.integer,
-        .infinite = parser.value.object.get("infinite").?.bool,
-        .orientation = parser.value.object.get("infinite").?.string,
-        .layers: parseLayersArray(parser.value.object.get("layers").?.array), //parser for layers array TODO next
-        .nextlayerid: u64,
-        .nextobjectid: u64,
-        .parallaxoriginx: f64,
-        .parallaxoriginy: f64,
-        .properties: ?*[]Properties = null,
-        .renderorder: []const u8 = "right-down",
-        .staggeraxis: []const u8,
-        .staggerindex: []const u8,
-        .tiledversion: []const u8,
-        .tileheight: u64,
-        .tilesets: ?*[]Tileset = null,
-        .tilewidth: u64,
-        .type: []const u8 = "map",
-        .width: u64,
+        .compressionlevel = if (parser.value.object.get("compressionlevel")) |c| c.integer else null,
+        .hexsidelength = if (parser.value.object.get("hexsidelength")) |c| c.integer else null,
+        .infinite = if (parser.value.object.get("infinite")) |c| c.bool else null,
+        .layers = layersParsedData,
+        .nextlayerid = if (parser.value.object.get("nextlayerid")) |c| c.integer else null,
+        .nextobjectid = if (parser.value.object.get("nextobjectid")) |c| c.integer else null,
+        .parallaxoriginx = if (parser.value.object.get("parallaxoriginx")) |c| c.float else null,
+        .parallaxoriginy = if (parser.value.object.get("parallaxoriginy")) |c| c.float else null,
+        //.properties: ?*[]Properties = null,
+        .renderorder = if (parser.value.object.get("renderorder")) |c| c.string else null,
+        .staggeraxis = if (parser.value.object.get("staggeraxis")) |c| c.string else null,
+        .staggerindex = if (parser.value.object.get("staggerindex")) |c| c.string else null,
+        .tiledversion = if (parser.value.object.get("tiledversion")) |c| c.string else null,
+        .tileheight = parser.value.object.get("tileheight").?.integer,
+        //.tilesets: ?*[]Tileset = null,
+        .tilewidth = parser.value.object.get("tilewidth").?.integer,
+        .type = if (parser.value.object.get("type")) |c| c.string else null,
+        .width = parser.value.object.get("width").?.integer,
     };
 
     return result;
+}
+
+fn parseLayersArray(allocator: std.mem.Allocator, layersArr: ?std.json.Array) ![]Layers {
+    var layers = std.ArrayList(Layers).init(allocator);
+    defer layers.deinit();
+
+    std.debug.print("Layers len: {any}\n", .{layersArr.?.items.len});
+
+    for (layersArr.?.items) |item| {
+        const item_obj = item.object;
+
+        const val = Layers{
+            .height = item_obj.get("height").?.integer,
+        };
+        try layers.append(val);
+    }
+
+    return layers.toOwnedSlice();
 }
