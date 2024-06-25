@@ -50,6 +50,44 @@ pub const Properties = struct {
     value: []const u8,
 };
 
+pub const Solver = struct {
+    allocator: *std.mem.Allocator,
+    parsedData: std.json.Parsed(std.json.Value),
+    //result: Map,
+    //layers: []Layers,
+
+    pub fn init(allocator: *std.mem.Allocator, path: []const u8) !Solver {
+        //parsed data
+        const parseData = try parseJsonFile(allocator, path);
+        //layers
+        //map
+        return .{ .allocator = allocator, .parsedData = parseData };
+    }
+
+    pub fn deinit(self: *Solver) void {
+        self.parsedData.deinit();
+        //self.allocator.free(self.layers);
+        //self.allocator.free(self.result);
+    }
+};
+
+pub fn parseJsonFile(allocator: *std.mem.Allocator, path: []const u8) !std.json.Parsed(std.json.Value) {
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    const file_size = try file.getEndPos();
+    const file_buffer = try allocator.alloc(u8, file_size);
+    defer allocator.free(file_buffer);
+    const data = try std.fs.cwd().readFile(path, file_buffer);
+
+    //parse json data
+    const parser = try std.json.parseFromSlice(std.json.Value, allocator.*, data, .{ .allocate = .alloc_always });
+
+    return parser;
+}
+
+////////////////////////////////////
+//redundant
 pub fn readTiledMapJson(allocator: std.mem.Allocator, path: []const u8) !Map {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
@@ -57,16 +95,14 @@ pub fn readTiledMapJson(allocator: std.mem.Allocator, path: []const u8) !Map {
     const file_size = try file.getEndPos();
     const file_buffer = try allocator.alloc(u8, file_size);
     defer allocator.free(file_buffer);
-
     const data = try std.fs.cwd().readFile(path, file_buffer);
 
     //parse json data
     const parser = try std.json.parseFromSlice(std.json.Value, allocator, data, .{ .allocate = .alloc_always });
     defer parser.deinit();
 
-    //std.debug.print("layers original data {any}", .{parser.value.object.get("layers").?.array});
-
     const layersParsedData = try parseLayersArray(allocator, parser.value.object.get("layers").?.array);
+    defer allocator.free(layersParsedData);
 
     const result = Map{
         .height = parser.value.object.get("height").?.integer,
@@ -93,37 +129,18 @@ pub fn readTiledMapJson(allocator: std.mem.Allocator, path: []const u8) !Map {
     return result;
 }
 
-// fn parseLayersArray(allocator: std.mem.Allocator, layersArr: ?std.json.Array) ![]Layers {
-//     var layers = std.ArrayList(Layers).init(allocator);
-//     defer layers.clearAndFree();
-//
-//     std.debug.print("Layers len: {any}\n", .{layersArr.?.items.len});
-//
-//     for (layersArr.?.items) |item| {
-//         const item_obj = item.object;
-//
-//         const val = Layers{
-//             .height = item_obj.get("height").?.integer,
-//         };
-//         try layers.append(val);
-//     }
-//
-//     return layers.toOwnedSlice();
-// }
-
 fn parseLayersArray(allocator: std.mem.Allocator, layersArr: ?std.json.Array) ![]Layers {
     if (layersArr == null) return &[_]Layers{};
 
     const layerCount = layersArr.?.items.len;
     var layers = try allocator.alloc(Layers, layerCount);
-    defer allocator.free(layers);
 
-    for (layersArr.?.items, 0..(layersArr.?.items.len)) |item, index| {
+    for (layersArr.?.items, 0..) |item, index| {
         const item_obj = item.object;
+        var layer = try allocator.create(Layers);
+        layer.height = item_obj.get("height").?.integer;
 
-        layers[index] = Layers{
-            .height = item_obj.get("height").?.integer,
-        };
+        layers[index] = layer.*;
     }
 
     return layers;
