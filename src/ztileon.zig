@@ -10,20 +10,20 @@ pub const Map = struct {
     nextobjectid: ?i64,
     parallaxoriginx: ?f64,
     parallaxoriginy: ?f64,
-    properties: ?[]Properties = null,
+    //properties: ?[]*Properties = null, // not sure if array or object
     renderorder: ?[]const u8 = null,
     staggeraxis: ?[]const u8 = null,
     staggerindex: ?[]const u8 = null,
     tiledversion: ?[]const u8 = null,
     tileheight: i64,
-    tilesets: ?[]Tileset = null,
+    tilesets: []*Tileset,
     tilewidth: i64,
     type: ?[]const u8 = "map",
     width: i64,
 };
 
 pub const Layers = struct {
-    //chunks: ?[]Chunk = null,
+    //chunks: ?[]Chunk = null, //seems not important
     data: []i64,
     height: i64,
     width: i64,
@@ -41,9 +41,18 @@ pub const Chunk = struct {
 };
 
 pub const Tileset = struct {
-    columns: i64,
+    columns: ?i64,
     firstgid: i64,
-    grid: ?Grid = null,
+    image: []const u8,
+    imageheight: i64,
+    imagewidth: i64,
+    margin: i64,
+    name: []const u8,
+    // properties: ?[]*Properties = null,    //not sure if this is a object or array
+    spaceing: i64,
+    tilecount: ?i64,
+    tileheight: i64,
+    tilewidth: i64,
 };
 
 pub const Grid = struct {
@@ -56,7 +65,7 @@ pub const Properties = struct {
     name: []const u8,
     type: []const u8,
     propertytype: []const u8,
-    value: []const u8,
+    value: std.json.Value,
 };
 
 pub const Solver = struct {
@@ -64,12 +73,21 @@ pub const Solver = struct {
     parsedData: std.json.Parsed(std.json.Value),
     result: Map,
     layers: []*Layers,
+    //properties: []*Properties,
+    tilesets: []*Tileset,
 
     pub fn init(allocator: *std.mem.Allocator, path: []const u8) !Solver {
         //parsed data
         const parser = try parseJsonFile(allocator, path);
         //layers
         const layersParsedData = try parseLayersArray(allocator, parser.value.object.get("layers").?.array);
+
+        //properties
+        // const propertiesParsedData = try parsePropertiesArray(allocator, parser.value.object.get("properties").?.array);
+
+        //tileset
+        const tilesetParsedData = try parseTilesetArray(allocator, parser.value.object.get("tilesets").?.array);
+
         //map
         const result = Map{
             .height = parser.value.object.get("height").?.integer,
@@ -81,13 +99,13 @@ pub const Solver = struct {
             .nextobjectid = if (parser.value.object.get("nextobjectid")) |c| c.integer else null,
             .parallaxoriginx = if (parser.value.object.get("parallaxoriginx")) |c| c.float else null,
             .parallaxoriginy = if (parser.value.object.get("parallaxoriginy")) |c| c.float else null,
-            //.properties: ?*[]Properties = null,
+            //.properties = propertiesParsedData,
             .renderorder = if (parser.value.object.get("renderorder")) |c| c.string else null,
             .staggeraxis = if (parser.value.object.get("staggeraxis")) |c| c.string else null,
             .staggerindex = if (parser.value.object.get("staggerindex")) |c| c.string else null,
             .tiledversion = if (parser.value.object.get("tiledversion")) |c| c.string else null,
             .tileheight = parser.value.object.get("tileheight").?.integer,
-            //.tilesets: ?*[]Tileset = null,
+            .tilesets = tilesetParsedData,
             .tilewidth = parser.value.object.get("tilewidth").?.integer,
             .type = if (parser.value.object.get("type")) |c| c.string else null,
             .width = parser.value.object.get("width").?.integer,
@@ -98,6 +116,8 @@ pub const Solver = struct {
             .parsedData = parser,
             .layers = layersParsedData,
             .result = result,
+            // .properties = propertiesParsedData,
+            .tilesets = tilesetParsedData,
         };
     }
 
@@ -108,8 +128,12 @@ pub const Solver = struct {
             self.allocator.destroy(layer);
         }
         self.allocator.free(self.layers);
-        //self.allocator.free(self.layers);
-        //self.allocator.free(self.result);
+        // self.allocator.free(self.properties);
+
+        for (self.tilesets) |tileset| {
+            self.allocator.destroy(tileset);
+        }
+        self.allocator.free(self.tilesets);
     }
 };
 
@@ -164,4 +188,54 @@ fn parselayer_data(allocator: *std.mem.Allocator, dataArr: std.json.Array) !std.
         }
         return result;
     } else return undefined;
+}
+
+fn parsePropertiesArray(allocator: *std.mem.Allocator, propArr: ?std.json.Array) ![]*Properties {
+    const propCount = propArr.?.items.len;
+    if (propCount <= 0) {
+        return undefined;
+    }
+    const props = try allocator.alloc(*Properties, propCount);
+
+    for (propArr.?.items, 0..) |item, index| {
+        const item_obj = item.object;
+        const prop = try allocator.create(Properties);
+        prop.*.value = item_obj.get("value").?;
+        prop.*.name = item_obj.get("name").?.string;
+        prop.*.type = item_obj.get("type").?.string;
+        prop.*.propertytype = item_obj.get("propertytype").?.string;
+
+        props[index] = prop;
+    }
+
+    return props;
+}
+
+fn parseTilesetArray(allocator: *std.mem.Allocator, tileArr: ?std.json.Array) ![]*Tileset {
+    const tileCount = tileArr.?.items.len;
+    if (tileCount <= 0) {
+        return undefined;
+    }
+    const tiles = try allocator.alloc(*Tileset, tileCount);
+
+    for (tileArr.?.items, 0..) |item, index| {
+        const item_obj = item.object;
+        const tile = try allocator.create(Tileset);
+        tile.*.columns = if (item_obj.get("columns")) |t| t.integer else null;
+        tile.*.firstgid = item_obj.get("firstgid").?.integer;
+        tile.*.image = item_obj.get("image").?.string;
+        tile.*.imageheight = item_obj.get("imageheight").?.integer;
+        tile.*.imagewidth = item_obj.get("imagewidth").?.integer;
+        tile.*.margin = item_obj.get("margin").?.integer;
+        tile.*.name = item_obj.get("name").?.string;
+        // tile.*.properties = try parsePropertiesArray(allocator, item_obj.get("properties").?.array);
+        tile.*.spaceing = item_obj.get("spacing").?.integer;
+        tile.*.tilecount = if (item_obj.get("tilecount")) |t| t.integer else null;
+        tile.*.tileheight = item_obj.get("tileheight").?.integer;
+        tile.*.tilewidth = item_obj.get("tilewidth").?.integer;
+
+        tiles[index] = tile;
+    }
+
+    return tiles;
 }

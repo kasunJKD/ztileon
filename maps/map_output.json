@@ -35,9 +35,9 @@
         }],
  "orientation":"orthogonal",
  "properties":
-    {
+   [
 
-    },
+   ],
  "tileheight":32,
  "tilesets":[
         {
